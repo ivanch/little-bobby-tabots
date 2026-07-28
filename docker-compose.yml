@@ -1,7 +1,17 @@
 services:
   bot:
     build: .
+    image: git.ivanch.me/ivanch/little-bobby-tabots:latest
     container_name: little-bobby-tabots
     restart: unless-stopped
     env_file:
       - .env
+    environment:
+      PLAYLISTS_DIR: /playlists
+    ports:
+      - "3000:3000"
+    volumes:
+      - type: bind
+        source: ${PLAYLISTS_HOST_DIR:-${PLAYLISTS_DIR:-./playlists}}
+        target: /playlists
+        read_only: true

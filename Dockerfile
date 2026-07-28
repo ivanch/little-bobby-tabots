@@ -1,4 +1,15 @@
-# Build Stage
+# Dashboard Build Stage
+FROM node:24-alpine AS web-builder
+
+WORKDIR /usr/src/little-bobby-tabots/web
+
+COPY web/package.json web/package-lock.json ./
+RUN npm ci
+
+COPY web ./
+RUN npm run build
+
+# Rust Build Stage
 FROM rust:alpine AS builder
 
 # Install build dependencies, including git, static OpenSSL, build-base, and cmake
@@ -36,10 +47,15 @@ ENV PATH="/root/.local/bin:${PATH}"
 
 # Copy the compiled static binary from the builder stage
 COPY --from=builder /usr/src/little-bobby-tabots/target/release/little-bobby-tabots /usr/local/bin/little-bobby-tabots
+COPY --from=web-builder /usr/src/little-bobby-tabots/web/dist /opt/little-bobby-tabots/web
 
 # Set runtime env defaults
-ENV DISCORD_TOKEN=""
 ENV GUILD_ID=""
 ENV RUST_LOG="info"
+ENV WEB_BIND="0.0.0.0:3000"
+ENV DASHBOARD_DIR="/opt/little-bobby-tabots/web"
+ENV PLAYLISTS_DIR="/playlists"
+
+EXPOSE 3000
 
 CMD ["little-bobby-tabots"]

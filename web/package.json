@@ -1,0 +1,20 @@
+{
+  "name": "little-bobby-tabots-dashboard",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview --host 0.0.0.0"
+  },
+  "dependencies": {
+    "lucide-preact": "^1.27.0",
+    "preact": "^10.29.7"
+  },
+  "devDependencies": {
+    "@preact/preset-vite": "^2.10.6",
+    "typescript": "^7.0.2",
+    "vite": "^8.1.5"
+  }
+}

@@ -109,7 +109,8 @@ pub struct Track {
     pub title: String,
     /// The resolved URL that yt-dlp will stream from.
     pub url: String,
-    pub requested_by: UserId,
+    /// Discord requester, or `None` when the track came from the web dashboard.
+    pub requested_by: Option<UserId>,
     /// Songbird's unique ID for this playback instance.
     pub playback_id: Option<String>,
 }
@@ -123,7 +124,7 @@ mod tests {
         Track {
             title: title.to_string(),
             url: format!("https://example.com/{title}"),
-            requested_by: UserId::new(1),
+            requested_by: Some(UserId::new(1)),
             playback_id: None,
         }
     }
