@@ -4,7 +4,7 @@ use rand::Rng;
 use serenity::{
     all::{
         CommandInteraction, CreateEmbed, CreateEmbedFooter, CreateInteractionResponse,
-        CreateInteractionResponseMessage, ResolvedValue,
+        CreateInteractionResponseMessage, ResolvedValue, UserId,
     },
     client::Context,
 };
@@ -17,6 +17,7 @@ use tracing::{error, info};
 
 use crate::{
     commands::{guild_state::Track, preplay, youtube_playlist},
+    playlists::Playlist,
     Data,
 };
 
@@ -69,7 +70,7 @@ pub async fn run(
     // Playlist expansion and normal metadata lookup can take a few seconds.
     command.defer(&ctx.http).await?;
 
-    let request = match resolve_request(&query, command.user.id).await {
+    let request = match resolve_request(&query, Some(command.user.id)).await {
         Ok(request) => request,
         Err(message) => return edit_reply(ctx, command, &message).await,
     };
@@ -96,54 +97,21 @@ pub async fn run(
         }
     };
 
-    // The mutation lock keeps this batch ordered without holding the state
-    // write lock while Songbird creates every source.
-    let (was_idle, queued_tracks) = {
-        let mut handler = handler_lock.lock().await;
-        let was_idle = handler.queue().is_empty();
-        let client = reqwest::Client::new();
-        let mut queued_tracks = request.tracks.clone();
-
-        for track in &mut queued_tracks {
-            let source = YoutubeDl::new(client.clone(), track.url.clone());
-            let mut songbird_track = SongbirdTrack::new(source.into());
-            let playback_id = songbird_track.uuid.to_string();
-            track.playback_id = Some(playback_id.clone());
-            songbird_track.events.add_event(
-                EventData::new(
-                    Event::Track(TrackEvent::End),
-                    MusicTrackEndHandler {
-                        guild_id: guild_id.get(),
-                        data: Arc::clone(data),
-                        songbird: Arc::clone(&songbird),
-                        playback_id,
-                    },
-                ),
-                Duration::ZERO,
-            );
-            handler.enqueue(songbird_track).await;
-        }
-
-        (was_idle, queued_tracks)
-    };
-
-    let state_arc = data.music_state(guild_id.get()).await;
-    let mut state = state_arc.write().await;
-    state.enqueue_batch(queued_tracks, was_idle);
-    drop(state);
+    let was_idle =
+        enqueue_resolved_request(&handler_lock, guild_id.get(), data, &songbird, &request).await;
     drop(_operation_guard);
 
     reply_for_request(ctx, command, &request, was_idle).await
 }
 
-struct ResolvedPlayRequest {
-    tracks: Vec<Track>,
-    playlist_title: Option<String>,
+pub(crate) struct ResolvedPlayRequest {
+    pub tracks: Vec<Track>,
+    pub playlist_title: Option<String>,
 }
 
-async fn resolve_request(
+pub(crate) async fn resolve_request(
     query: &str,
-    requested_by: serenity::all::UserId,
+    requested_by: Option<UserId>,
 ) -> Result<ResolvedPlayRequest, String> {
     if youtube_playlist::is_youtube_playlist_url(query) {
         let playlist = youtube_playlist::resolve(query).await.map_err(|error| {
@@ -169,6 +137,52 @@ async fn resolve_request(
         });
     }
 
+    Ok(ResolvedPlayRequest {
+        tracks: vec![resolve_track(query, requested_by).await?],
+        playlist_title: None,
+    })
+}
+
+/// Resolve every entry in one predefined text playlist before it mutates playback.
+pub(crate) async fn resolve_predefined_playlist(
+    playlist: &Playlist,
+    requested_by: Option<UserId>,
+) -> Result<ResolvedPlayRequest, String> {
+    let mut tracks = Vec::with_capacity(playlist.entries.len());
+
+    for entry in &playlist.entries {
+        if youtube_playlist::is_youtube_playlist_url(&entry.query) {
+            return Err(format!(
+                "❌ Playlist `{}` line {} must be a single song or URL, not a YouTube playlist. Nothing was queued.",
+                playlist.name, entry.line_number
+            ));
+        }
+
+        let track = resolve_track(&entry.query, requested_by)
+            .await
+            .map_err(|error| {
+                error!(
+                    playlist = %playlist.name,
+                    line = entry.line_number,
+                    query = %entry.query,
+                    "Could not resolve predefined playlist entry: {error}"
+                );
+                format!(
+                    "❌ Could not resolve playlist `{}` line {}. Nothing was queued.",
+                    playlist.name, entry.line_number
+                )
+            })?;
+        tracks.push(track);
+    }
+
+    Ok(ResolvedPlayRequest {
+        tracks,
+        playlist_title: Some(playlist.name.clone()),
+    })
+}
+
+/// Resolve a single song query or direct media URL.
+async fn resolve_track(query: &str, requested_by: Option<UserId>) -> Result<Track, String> {
     // URLs are sent to yt-dlp as-is; search text resolves to one YouTube result.
     let source_url = if is_url(query) {
         query.to_string()
@@ -189,18 +203,74 @@ async fn resolve_request(
         .filter(|url| !url.is_empty())
         .unwrap_or(source_url);
 
-    Ok(ResolvedPlayRequest {
-        tracks: vec![Track {
-            title,
-            url: resolved_url,
-            requested_by,
-            playback_id: None,
-        }],
-        playlist_title: None,
+    Ok(Track {
+        title,
+        url: resolved_url,
+        requested_by,
+        playback_id: None,
     })
 }
 
-async fn reply_for_request(
+/// Append a resolved batch to Songbird and mirror the same order in guild state.
+/// The caller must hold the guild operation lock for the whole mutation.
+pub(crate) async fn enqueue_resolved_request(
+    handler_lock: &Arc<tokio::sync::Mutex<songbird::Call>>,
+    guild_id: u64,
+    data: &Arc<Data>,
+    songbird: &Arc<songbird::Songbird>,
+    request: &ResolvedPlayRequest,
+) -> bool {
+    // Keep the state write lock free while Songbird creates every source.
+    let (was_idle, queued_tracks) = {
+        let mut handler = handler_lock.lock().await;
+        let was_idle = handler.queue().is_empty();
+        let client = reqwest::Client::new();
+        let mut queued_tracks = request.tracks.clone();
+
+        for track in &mut queued_tracks {
+            let songbird_track =
+                create_songbird_track(track, guild_id, data, songbird, client.clone());
+            handler.enqueue(songbird_track).await;
+        }
+
+        (was_idle, queued_tracks)
+    };
+
+    let state_arc = data.music_state(guild_id).await;
+    state_arc
+        .write()
+        .await
+        .enqueue_batch(queued_tracks, was_idle);
+    was_idle
+}
+
+pub(crate) fn create_songbird_track(
+    track: &mut Track,
+    guild_id: u64,
+    data: &Arc<Data>,
+    songbird: &Arc<songbird::Songbird>,
+    client: reqwest::Client,
+) -> SongbirdTrack {
+    let source = YoutubeDl::new(client, track.url.clone());
+    let mut songbird_track = SongbirdTrack::new(source.into());
+    let playback_id = songbird_track.uuid.to_string();
+    track.playback_id = Some(playback_id.clone());
+    songbird_track.events.add_event(
+        EventData::new(
+            Event::Track(TrackEvent::End),
+            MusicTrackEndHandler {
+                guild_id,
+                data: Arc::clone(data),
+                songbird: Arc::clone(songbird),
+                playback_id,
+            },
+        ),
+        Duration::ZERO,
+    );
+    songbird_track
+}
+
+pub(crate) async fn reply_for_request(
     ctx: &Context,
     command: &CommandInteraction,
     request: &ResolvedPlayRequest,
@@ -276,7 +346,7 @@ fn is_url(input: &str) -> bool {
     input.starts_with("http://") || input.starts_with("https://")
 }
 
-async fn reply_ephemeral(
+pub(crate) async fn reply_ephemeral(
     ctx: &Context,
     command: &CommandInteraction,
     content: &str,
@@ -293,7 +363,7 @@ async fn reply_ephemeral(
         .await
 }
 
-async fn edit_reply(
+pub(crate) async fn edit_reply(
     ctx: &Context,
     command: &CommandInteraction,
     content: &str,

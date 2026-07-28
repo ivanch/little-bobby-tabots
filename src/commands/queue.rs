@@ -74,8 +74,10 @@ fn build_queue_description(state: &GuildMusicState) -> String {
             .push_str("**🔊 Pre-play Audio**\nPlaying the configured between-track clip.\n\n");
     } else if let Some(current) = &state.current {
         description.push_str(&format!(
-            "**🎵 Now Playing**\n[{}]({})\nRequested by <@{}>\n\n",
-            current.title, current.url, current.requested_by
+            "**🎵 Now Playing**\n[{}]({})\nRequested by {}\n\n",
+            current.title,
+            current.url,
+            requester_label(current.requested_by)
         ));
     }
 
@@ -85,11 +87,11 @@ fn build_queue_description(state: &GuildMusicState) -> String {
         description.push_str("**Up Next**\n");
         for (i, track) in state.queue.iter().enumerate() {
             description.push_str(&format!(
-                "`{}`. [{}]({}) — <@{}>\n",
+                "`{}`. [{}]({}) — {}\n",
                 i + 1,
                 track.title,
                 track.url,
-                track.requested_by
+                requester_label(track.requested_by)
             ));
             // Discord embed description limit is 4096 chars; stop early if needed
             if description.len() > 3800 {
@@ -100,6 +102,12 @@ fn build_queue_description(state: &GuildMusicState) -> String {
     }
 
     description
+}
+
+fn requester_label(requested_by: Option<serenity::all::UserId>) -> String {
+    requested_by
+        .map(|user_id| format!("<@{user_id}>"))
+        .unwrap_or_else(|| "Dashboard".to_string())
 }
 
 async fn reply_text(
@@ -130,7 +138,7 @@ mod tests {
         Track {
             title: title.to_string(),
             url: format!("https://example.com/{title}"),
-            requested_by: UserId::new(1),
+            requested_by: Some(UserId::new(1)),
             playback_id: None,
         }
     }

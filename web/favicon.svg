@@ -1,0 +1,83 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <!-- Headphone Band Gradient -->
+    <linearGradient id="band-grad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#00f2fe"/>
+      <stop offset="50%" stop-color="#7b2cbf"/>
+      <stop offset="100%" stop-color="#00f2fe"/>
+    </linearGradient>
+
+    <!-- Vinyl Platter Radial Gradient -->
+    <radialGradient id="vinyl-grad" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#1e2436"/>
+      <stop offset="50%" stop-color="#0d0f17"/>
+      <stop offset="85%" stop-color="#181d2c"/>
+      <stop offset="100%" stop-color="#090b10"/>
+    </radialGradient>
+
+    <!-- Record Label Gradient -->
+    <linearGradient id="label-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ff007f"/>
+      <stop offset="100%" stop-color="#7928ca"/>
+    </linearGradient>
+  </defs>
+
+  <!-- MAIN DJ ICON GRAPHIC (Scaled up to maximize SVG viewBox canvas) -->
+  <g id="dj-icon" transform="translate(256 256) scale(1.41) translate(-256 -225)">
+    <!-- TURNTABLE / MIXING DECK BASE -->
+    <g id="deck">
+      <!-- Deck Body -->
+      <rect x="146" y="166" width="220" height="220" rx="28" fill="#151926" stroke="#2a324b" stroke-width="4"/>
+      <!-- Inner Deck Inset -->
+      <rect x="156" y="176" width="200" height="200" rx="20" fill="#111420" stroke="#1d2334" stroke-width="2"/>
+
+      <!-- Platter / Record -->
+      <circle cx="236" cy="276" r="76" fill="url(#vinyl-grad)" stroke="#252d43" stroke-width="4"/>
+      <!-- Groove lines -->
+      <circle cx="236" cy="276" r="62" fill="none" stroke="#252d43" stroke-width="1.5" stroke-dasharray="8 3"/>
+      <circle cx="236" cy="276" r="48" fill="none" stroke="#1f2639" stroke-width="1.5"/>
+      <circle cx="236" cy="276" r="36" fill="none" stroke="#252d43" stroke-width="1"/>
+      
+      <!-- Record Label -->
+      <circle cx="236" cy="276" r="26" fill="url(#label-grad)"/>
+      <!-- Center Spindle -->
+      <circle cx="236" cy="276" r="6" fill="#ffffff"/>
+      <circle cx="236" cy="276" r="3" fill="#0b0d14"/>
+
+      <!-- Tonearm Assembly -->
+      <circle cx="330" cy="206" r="12" fill="#252d43" stroke="#3b4769" stroke-width="2"/>
+      <circle cx="330" cy="206" r="6" fill="#00f2fe"/>
+      <path d="M 330 206 L 322 244 L 292 260" fill="none" stroke="#e2e8f0" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+      <rect x="282" y="254" width="14" height="16" rx="3" fill="#00f2fe" transform="rotate(15 289 262)"/>
+
+      <!-- Deck Controls (Pitch Slider & Knobs) -->
+      <line x1="336" y1="280" x2="336" y2="340" stroke="#252d43" stroke-width="4" stroke-linecap="round"/>
+      <rect x="328" y="302" width="16" height="10" rx="3" fill="#00f2fe"/>
+
+      <circle cx="298" cy="198" r="7" fill="#252d43" stroke="#00f2fe" stroke-width="2"/>
+      <circle cx="316" cy="198" r="7" fill="#252d43" stroke="#7b2cbf" stroke-width="2"/>
+
+      <!-- Cue / Play Buttons -->
+      <circle cx="178" cy="354" r="8" fill="#00f2fe" opacity="0.9"/>
+      <circle cx="198" cy="354" r="8" fill="#ff007f" opacity="0.9"/>
+    </g>
+
+    <!-- MINIMAL HEADPHONES (Higher Arc) -->
+    <g id="headphones" transform="translate(0, -35)">
+      <!-- Outer Arc / Headband -->
+      <path d="M 112 270 C 112 90, 400 90, 400 270" fill="none" stroke="url(#band-grad)" stroke-width="24" stroke-linecap="round"/>
+      <!-- Inner Headband Accent -->
+      <path d="M 140 230 C 140 120, 372 120, 372 230" fill="none" stroke="#121624" stroke-width="8" stroke-linecap="round"/>
+
+      <!-- Left Ear Cup -->
+      <path d="M 112 250 L 112 275" stroke="#00f2fe" stroke-width="10" stroke-linecap="round"/>
+      <rect x="88" y="235" width="46" height="96" rx="23" fill="#151926" stroke="#00f2fe" stroke-width="4"/>
+      <rect x="116" y="245" width="18" height="76" rx="9" fill="#00f2fe" opacity="0.85"/>
+
+      <!-- Right Ear Cup -->
+      <path d="M 400 250 L 400 275" stroke="#00f2fe" stroke-width="10" stroke-linecap="round"/>
+      <rect x="378" y="235" width="46" height="96" rx="23" fill="#151926" stroke="#00f2fe" stroke-width="4"/>
+      <rect x="378" y="245" width="18" height="76" rx="9" fill="#00f2fe" opacity="0.85"/>
+    </g>
+  </g>
+</svg>

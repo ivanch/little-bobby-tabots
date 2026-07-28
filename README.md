@@ -18,7 +18,9 @@
 *   **Streamed Playback**: Downloads nothing to disk. Audio is piped directly from `yt-dlp` via `ffmpeg` to memory buffers, leaving zero temp file waste.
 *   **Automatic Voice Cleanup**: Stops playback, clears the queue, and disconnects after the voice channel has no human listeners for 10 minutes.
 *   **Probabilistic Pre-Play Audio**: Optionally inserts a configured YouTube clip between queued music tracks using a configurable percentage chance.
+*   **Predefined Playlists**: Read text playlists from a local folder and queue them from Discord or the dashboard.
 *   **Slash Commands**: Supports full modern slash interaction registry with guild-level instant registration.
+*   **Web Dashboard**: A responsive Preact interface for adding tracks, viewing and reordering the queue, clearing upcoming songs, and controlling playback in light or dark mode.
 
 ---
 
@@ -27,6 +29,7 @@
 | Command | Description |
 | :--- | :--- |
 | `/play <query>` | Connects to your voice channel and plays/queues a song (searches YouTube/SoundCloud or accepts direct URLs). An explicit YouTube `/playlist?list=...` URL queues resolvable videos in playlist order. |
+| `/playlist <name>` | Queues the songs from `<name>.txt` in the configured predefined-playlists folder. |
 | `/pause` | Pauses playback of the current track. |
 | `/resume` | Resumes playing the paused track. |
 | `/skip` | Skips the current track and starts the next one in the queue. |
@@ -54,12 +57,31 @@ Create a `.env` file in the project root:
 ```env
 DISCORD_TOKEN=your_copied_discord_bot_token_here
 GUILD_ID=your_test_server_id_here
+VOICE_CHANNEL_ID=the_voice_channel_for_dashboard_playback
 PREPLAY_URL=https://www.youtube.com/watch?v=your_video_id
 PREPLAY_CHANCE_PERCENT=75
+PLAYLISTS_HOST_DIR=./playlists
 ```
 > [!NOTE]
-> Setting `GUILD_ID` registers slash commands instantly in your test server on bot startup. Without it, commands are registered globally and can take up to an hour to populate.
+> Setting `GUILD_ID` registers slash commands instantly in your test server on bot startup and removes this bot's old global commands, preventing duplicate entries. Without it, commands are registered globally and can take up to an hour to populate.
+> `VOICE_CHANNEL_ID` lets the dashboard connect the bot when it is not already in voice. If the bot is connected, the dashboard uses its current channel.
 > `PREPLAY_URL` is optional when a URL is supplied directly to `/preplay`. `PREPLAY_CHANCE_PERCENT` is optional and defaults to `75`; valid values are `0` through `100`.
+> `PLAYLISTS_HOST_DIR` is the host folder mounted read-only at `/playlists` by Docker Compose. It defaults to `./playlists`.
+> If an existing `.env` already sets `PLAYLISTS_DIR` to the host playlist folder, Compose uses it as a fallback bind path; `PLAYLISTS_HOST_DIR` takes precedence.
+
+### Predefined playlist files
+
+Create a `.txt` file in the configured folder, such as `playlists/road-trip.txt`. Its filename without `.txt` is the playlist name used by `/playlist` and shown in the dashboard.
+
+Each non-empty line is a song search or direct media URL. Blank lines are ignored; order is preserved. A playlist can contain up to 100 entries, with a maximum of 500 characters per line. Every entry must resolve successfully before anything is queued.
+
+```text
+Daft Punk Get Lucky
+https://www.youtube.com/watch?v=dQw4w9WgXcQ
+Massive Attack Teardrop
+```
+
+The dashboard refreshes its playlist selector automatically and queues the selected file using the same rules as `/playlist`.
 
 ---
 
@@ -75,10 +97,15 @@ The easiest way to run the bot is containerized via Docker Compose. The multi-st
     ```bash
     docker compose logs -f
     ```
-3.  Stop the bot container:
+3.  Open the dashboard at [http://localhost:3000](http://localhost:3000).
+4.  Stop the bot container:
     ```bash
     docker compose down
     ```
+
+The dashboard controls the single server configured by `GUILD_ID`. Keep port
+`3000` on a trusted network unless you place an authenticated reverse proxy in
+front of it.
 
 ---
 
@@ -88,11 +115,21 @@ To run the project directly from your shell, you will need the following install
 *   [Rust toolchain (stable)](https://rustup.rs/)
 *   [ffmpeg](https://ffmpeg.org/) (must be in your system `PATH`)
 *   [yt-dlp](https://github.com/yt-dlp/yt-dlp) (must be in your system `PATH`)
+*   [Node.js](https://nodejs.org/) 22 or newer (for building the dashboard)
 
-1.  Compile and run the release binary:
+1.  Build the dashboard:
+    ```bash
+    cd web
+    npm install
+    npm run build
+    cd ..
+    ```
+2.  Compile and run the release binary:
     ```bash
     cargo run --release
     ```
+
+For local runs, set `PLAYLISTS_DIR=./playlists` (or another readable folder) in `.env` before starting the bot.
 
 ---
 

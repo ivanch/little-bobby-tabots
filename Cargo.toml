@@ -49,6 +49,10 @@ url = "2"
 # Independent probability rolls for optional between-track audio.
 rand = "0.9"
 
+# Embedded web dashboard and static asset serving.
+axum = "0.8"
+tower-http = { version = "0.6", features = ["fs", "trace"] }
+
 [patch.crates-io]
 hpke-rs-libcrux = { git = "https://github.com/cryspen/hpke-rs.git" }
 libcrux-chacha20poly1305 = { git = "https://github.com/cryspen/libcrux.git" }

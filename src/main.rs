@@ -1,5 +1,7 @@
 mod commands;
+mod playlists;
 mod voice_idle;
+mod web;
 
 use std::{
     collections::HashMap,
@@ -13,11 +15,12 @@ use serenity::{
 };
 use songbird::SerenityInit;
 use tokio::sync::{Mutex, RwLock};
-use tracing::{error, info};
+use tracing::{error, info, warn};
 use tracing_subscriber::{fmt, EnvFilter};
 
 use commands::guild_state::GuildMusicState;
 use commands::preplay::PrePlayConfig;
+use playlists::PlaylistLibrary;
 
 /// Shared application data available to all command handlers.
 #[derive(Default)]
@@ -32,12 +35,15 @@ pub struct Data {
     pub(crate) next_empty_channel_timer_generation: AtomicU64,
     /// Process-wide pre-play defaults loaded from the environment.
     pub preplay_config: PrePlayConfig,
+    /// Read-only predefined playlists shared by Discord and the dashboard.
+    pub playlist_library: PlaylistLibrary,
 }
 
 impl Data {
-    pub fn new(preplay_config: PrePlayConfig) -> Self {
+    pub fn new(preplay_config: PrePlayConfig, playlist_library: PlaylistLibrary) -> Self {
         Self {
             preplay_config,
+            playlist_library,
             ..Self::default()
         }
     }
@@ -83,6 +89,16 @@ impl EventHandler for Handler {
                     )
                     .required(true),
                 ),
+            CreateCommand::new("playlist")
+                .description("Queue a predefined text playlist")
+                .add_option(
+                    serenity::all::CreateCommandOption::new(
+                        serenity::all::CommandOptionType::String,
+                        "name",
+                        "Playlist filename without the .txt extension",
+                    )
+                    .required(true),
+                ),
             CreateCommand::new("skip").description("Skip the current song"),
             CreateCommand::new("clear")
                 .description("Clear queued tracks without stopping the current song"),
@@ -115,6 +131,16 @@ impl EventHandler for Handler {
                     ),
                     Err(e) => error!("Failed to register guild slash commands: {e}"),
                 }
+
+                // Discord displays global and guild-specific commands together. Remove
+                // any global commands left from an earlier global registration so the
+                // configured guild does not show every command twice.
+                match Command::set_global_commands(&ctx.http, Vec::<CreateCommand>::new()).await {
+                    Ok(_) => {
+                        info!("Cleared global slash commands while using guild-specific commands")
+                    }
+                    Err(e) => warn!("Failed to clear global slash commands: {e}"),
+                }
                 return;
             }
         }
@@ -142,6 +168,7 @@ impl EventHandler for Handler {
         let result = match command.data.name.as_str() {
             "ping" => commands::ping::run(&ctx, &command).await,
             "play" => commands::play::run(&ctx, &command, &data).await,
+            "playlist" => commands::playlist::run(&ctx, &command, &data).await,
             "skip" => commands::skip::run(&ctx, &command, &data).await,
             "clear" => commands::clear::run(&ctx, &command, &data).await,
             "leave" => commands::leave::run(&ctx, &command, &data).await,
@@ -202,7 +229,7 @@ async fn main() {
 
     let preplay_config = PrePlayConfig::from_env()
         .unwrap_or_else(|error| panic!("Invalid pre-play configuration: {error}"));
-    let shared_data = Arc::new(Data::new(preplay_config));
+    let shared_data = Arc::new(Data::new(preplay_config, PlaylistLibrary::from_env()));
 
     let mut client = Client::builder(&token, intents)
         .event_handler(Handler)
@@ -212,6 +239,20 @@ async fn main() {
         .expect("Failed to create serenity client");
 
     info!("Starting Bobby TaBot…");
+
+    let songbird = {
+        let client_data = client.data.read().await;
+        client_data
+            .get::<songbird::serenity::SongbirdKey>()
+            .cloned()
+            .expect("Songbird must be registered")
+    };
+    let web_data = Arc::clone(&shared_data);
+    tokio::spawn(async move {
+        if let Err(error) = web::serve(web_data, songbird).await {
+            error!("Dashboard server stopped: {error}");
+        }
+    });
 
     if let Err(e) = client.start().await {
         error!("Client error: {e}");
