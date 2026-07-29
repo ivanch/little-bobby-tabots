@@ -1,7 +1,6 @@
 services:
   bot:
     build: .
-    image: git.ivanch.me/ivanch/little-bobby-tabots:latest
     container_name: little-bobby-tabots
     restart: unless-stopped
     env_file:
